@@ -1,8 +1,44 @@
-# OTA Verifier
+# OTA Firmware Verifier
 
-Simulated secure boot and OTA firmware verifier: a host-side **firmware signer** and a device-side **secure bootloader** that verify integrity and authenticity of firmware images and enforce anti-rollback protection.
+A simulated secure boot and OTA firmware verification system built in Rust. Models the cryptographic pipeline used in production automotive ECUs: a host-side **firmware signer** and a device-side **secure bootloader** that verify firmware integrity and authenticity, and enforce anti-rollback protection.
 
-See [architecture.md](architecture.md) and [planning.md](planning.md) for design details and development phases.
+> **Disclaimer:** This is a proof-of-concept simulation for educational and portfolio purposes. It models real-world automotive security patterns but does not run on embedded hardware.
+
+---
+
+## Motivation
+
+Modern vehicles contain dozens of ECUs that receive over-the-air firmware updates. Without cryptographic verification, an attacker who can reach the OTA channel — or who plugs into a diagnostic port — can flash arbitrary code onto safety-critical systems. Regulations such as **UNECE WP.29/R156** and the **ISO/SAE 21434** standard now mandate that OEMs implement secure software update mechanisms with integrity verification and rollback prevention.
+
+This project models that pipeline end-to-end: signing firmware with an OEM private key, embedding the signature in a structured binary image, and verifying that image in the bootloader before allowing execution.
+
+---
+
+## Security Model
+
+### Threat model
+
+| Threat | Attack scenario | Mitigation |
+|---|---|---|
+| **Malicious firmware flash** | Attacker loads unsigned firmware via a diagnostic port | Bootloader rejects — attacker lacks the OEM private key to produce a valid signature |
+| **OTA tampering** | Firmware is altered in transit over the air | A single changed byte invalidates the SHA-256 hash, causing Ed25519 verification to fail |
+| **Version downgrade** | Attacker re-flashes an older signed image containing known CVEs | Bootloader checks the image `VERSION` field against a stored monotonic counter and rejects downgrades |
+
+### Trust model
+
+```
+OEM Signing Host
+  └── secret.key (Ed25519 private key — never leaves signing host)
+        └── Signs firmware payload → firmware.signed.bin
+              └── Verified by secure_bootloader using public.key
+                    (public key is burned into the bootloader at build time)
+```
+
+### Cryptographic choices
+
+- **Ed25519 (EdDSA / Curve25519)** — fast, 64-byte signatures, resistant to side-channel attacks
+- **SHA-256** — payload is hashed before signing
+- **Rust + `ed25519-dalek` + `sha2`** — memory-safe implementation; no buffer overflows during header parsing
 
 ---
 
@@ -59,9 +95,11 @@ sudo dnf install cargo
 
 ## Build
 
-Clone or enter the workspace, then build all crates:
+Clone the repository and build all crates:
 
 ```bash
+git clone https://github.com/vgandhi1/ota-firmware-verifier.git
+cd ota-firmware-verifier
 cargo build --workspace
 ```
 
@@ -94,10 +132,10 @@ cargo run -p firmware_signer -- keygen \
 
 | File | Contents | Who holds it |
 |---|---|---|
-| `secret.key` | 32-byte Ed25519 private key | Signing host / CI secret |
+| `secret.key` | 32-byte Ed25519 private key | Signing host / CI secret — never commit |
 | `public.key` | 32-byte Ed25519 public key | Burned into the bootloader |
 
-> **Security note:** Keep `secret.key` out of version control. Add it to `.gitignore`.
+> Both files are excluded by `.gitignore`. Do not commit `secret.key` under any circumstances.
 
 ---
 
@@ -105,7 +143,7 @@ cargo run -p firmware_signer -- keygen \
 
 Produce a signed image from a raw `.bin` payload. The version number must be monotonically increasing for anti-rollback to work.
 
-> **Note:** `--payload` must point to an existing file. If you just want to test the pipeline, create a dummy payload first:
+> **Note:** Create a dummy payload if you don't have one:
 > ```bash
 > dd if=/dev/urandom of=firmware.bin bs=256 count=1
 > ```
@@ -118,7 +156,7 @@ cargo run -p firmware_signer -- sign \
   --output firmware.signed.bin
 ```
 
-The signed image has the following header layout:
+The signed image uses the following header layout:
 
 ```
 Offset  Size  Field
@@ -133,7 +171,7 @@ Offset  Size  Field
 
 ### 3. Verify and boot
 
-Run the secure bootloader against the signed image. Supply the public key that corresponds to the signing key used above.
+Run the secure bootloader against the signed image. Supply the public key that was generated in step 1.
 
 ```bash
 cargo run -p secure_bootloader -- \
@@ -155,13 +193,13 @@ cargo run -p secure_bootloader -- \
 
 ### 4. Anti-rollback enforcement
 
-The bootloader reads an optional `stored_version.txt` file in the current directory. If the file is present and its integer value is greater than the image version, the boot is rejected.
+The bootloader reads an optional `stored_version.txt` in the current directory. If present and its value exceeds the image version, the boot is rejected.
 
 ```bash
 # Simulate stored version = 2
 echo "2" > stored_version.txt
 
-# This will be rejected because version 1 < stored version 2
+# Rejected — image version 1 < stored version 2
 cargo run -p secure_bootloader -- \
   --image firmware.signed.bin \
   --public-key public.key
@@ -202,18 +240,26 @@ The `integration_tests` crate exercises four scenarios end-to-end:
 ## Project Structure
 
 ```
-OTA-verifier/
-├── Cargo.toml              # Workspace manifest
-├── firmware_signer/        # Host-side signing tool (keygen + sign)
+ota-firmware-verifier/
+├── Cargo.toml                    # Workspace manifest
+├── Cargo.lock                    # Pinned dependency versions
+├── firmware_signer/              # Host-side signing tool (keygen + sign)
 │   ├── Cargo.toml
 │   └── src/main.rs
-├── secure_bootloader/      # Device-side verifier / bootloader
+├── secure_bootloader/            # Device-side verifier / bootloader
 │   ├── Cargo.toml
 │   └── src/main.rs
-├── integration_tests/      # End-to-end test suite
+├── integration_tests/            # End-to-end test suite
 │   ├── Cargo.toml
 │   └── src/lib.rs
-├── architecture.md         # System design and header format
-├── planning.md             # Development phases and roadmap
-└── TECH_STACK.md           # Technology choices and rationale
+├── architecture.md               # System design and binary header format
+├── planning.md                   # Development phases and roadmap
+└── TECH_STACK.md                 # Technology choices and rationale
 ```
+
+---
+
+## Related Standards
+
+- **UNECE WP.29 / R156** — UN regulation mandating software update management systems for road vehicles
+- **ISO/SAE 21434** — Road vehicle cybersecurity engineering standard covering OTA security requirements
