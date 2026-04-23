@@ -1,0 +1,10 @@
+[package]
+name = "secure_bootloader"
+version = "0.1.0"
+edition = "2021"
+description = "Simulated bootloader that verifies signed firmware before boot"
+
+[dependencies]
+ed25519-dalek = "2.1"
+sha2 = "0.10"
+clap = { version = "4.4", features = ["derive"] }

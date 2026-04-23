@@ -1,0 +1,11 @@
+[package]
+name = "firmware_signer"
+version = "0.1.0"
+edition = "2021"
+description = "DevSecOps utility to sign firmware images for secure boot"
+
+[dependencies]
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+sha2 = "0.10"
+clap = { version = "4.4", features = ["derive"] }
+rand = "0.8"
