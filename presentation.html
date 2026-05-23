@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Embedded Secure Boot & OTA Verifier</title>
+<style>
+/* ── Reset ──────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--bg-card:#0f1523;--bg-card2:#151e30;
+  --accent:#3b82f6;--accent2:#6366f1;--accent3:#10b981;
+  --red:#ef4444;--gold:#f59e0b;--purple:#a855f7;
+  --text:#e2e8f0;--muted:#94a3b8;
+  --border:rgba(59,130,246,.2);--glow:rgba(59,130,246,.08);
+  --mono:'JetBrains Mono','Fira Code',monospace;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+
+/* ── Nav ─────────────────────────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 40px;height:52px;
+  background:rgba(7,9,15,.85);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:700;letter-spacing:.05em}
+.nav-links{display:flex;gap:6px}
+.nav-links a{
+  font-size:11px;color:var(--muted);text-decoration:none;padding:5px 12px;
+  border-radius:6px;transition:all .2s;letter-spacing:.04em;
+}
+.nav-links a:hover,.nav-links a.active{color:var(--text);background:rgba(59,130,246,.12)}
+
+/* ── Slide base ──────────────────────────────────────────────── */
+.slide{
+  min-height:100vh;display:flex;flex-direction:column;
+  justify-content:center;padding:88px 80px 72px;
+  position:relative;border-bottom:1px solid rgba(59,130,246,.1);
+}
+.slide-num{
+  position:absolute;top:68px;right:52px;
+  font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.12em;
+}
+.section-label{
+  font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+}
+.slide-title{font-size:clamp(1.5rem,3.2vw,2.3rem);font-weight:800;letter-spacing:-.025em;margin-bottom:8px;line-height:1.2}
+.slide-title span{color:var(--accent)}
+.slide-desc{color:var(--muted);font-size:.9rem;margin-bottom:36px;max-width:680px}
+
+/* ── Grids ───────────────────────────────────────────────────── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px}
+.card h3{font-size:.95rem;font-weight:600;margin-bottom:8px}
+.card p{font-size:.83rem;color:var(--muted);line-height:1.6}
+.bt-blue{border-top:3px solid var(--accent)}
+.bt-green{border-top:3px solid var(--accent3)}
+.bt-indigo{border-top:3px solid var(--accent2)}
+.bt-red{border-top:3px solid var(--red)}
+.bt-gold{border-top:3px solid var(--gold)}
+
+/* ── Tags ────────────────────────────────────────────────────── */
+.tag{display:inline-block;font-family:var(--mono);font-size:.7rem;padding:2px 9px;border-radius:4px;font-weight:600}
+.tg-blue{background:rgba(59,130,246,.15);color:var(--accent)}
+.tg-green{background:rgba(16,185,129,.15);color:var(--accent3)}
+.tg-indigo{background:rgba(99,102,241,.15);color:var(--accent2)}
+.tg-gold{background:rgba(245,158,11,.15);color:var(--gold)}
+.tg-red{background:rgba(239,68,68,.15);color:var(--red)}
+
+/* ── Hero ────────────────────────────────────────────────────── */
+.slide-hero{
+  background:radial-gradient(ellipse 70% 55% at 50% 40%,rgba(59,130,246,.1) 0%,transparent 70%);
+  align-items:center;text-align:center;
+}
+.hero-badge{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);border:1px solid var(--border);border-radius:20px;padding:5px 18px;margin-bottom:24px;background:var(--glow)}
+.hero-h1{font-size:clamp(2rem,5vw,3.4rem);font-weight:900;letter-spacing:-.03em;max-width:800px;line-height:1.1;
+  background:linear-gradient(135deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;background-clip:text;margin-bottom:18px}
+.hero-sub{font-size:1.05rem;color:var(--muted);max-width:620px;margin-bottom:40px}
+.pill-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.pill{font-family:var(--mono);font-size:11px;padding:5px 14px;border-radius:6px;
+  border:1px solid var(--border);background:var(--bg-card);color:var(--muted)}
+
+/* ── Animated counters ───────────────────────────────────────── */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:4px}
+.stat-box{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:12px;
+  padding:24px 16px;text-align:center;
+}
+.stat-val{
+  font-family:var(--mono);font-size:2rem;font-weight:800;display:block;
+  background:linear-gradient(135deg,#fff,var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.stat-lbl{font-size:.76rem;color:var(--muted);margin-top:4px}
+
+/* ── Timeline flow ───────────────────────────────────────────── */
+.flow{display:flex;align-items:stretch;gap:0}
+.flow-step{
+  flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;
+  padding:18px 14px;text-align:center;transition:border-color .3s;
+}
+.flow-step:hover{border-color:var(--accent)}
+.flow-step .si{font-size:1.4rem;margin-bottom:6px;display:block}
+.flow-step .sl{font-size:.82rem;font-weight:600}
+.flow-step .ss{font-size:.72rem;color:var(--muted);margin-top:3px}
+.flow-arrow{display:flex;align-items:center;padding:0 5px;color:var(--accent);font-size:1.2rem;flex-shrink:0}
+
+/* ── Binary format visual ────────────────────────────────────── */
+.bin-bar{display:flex;height:46px;border-radius:8px;overflow:hidden;font-size:.7rem;font-family:var(--mono);margin-top:24px}
+.bs{display:flex;align-items:center;justify-content:center;font-weight:600;padding:0 4px;white-space:nowrap;overflow:hidden}
+.bin-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.83rem}
+.bin-table th{background:var(--bg-card2);color:var(--muted);text-align:left;padding:9px 14px;
+  font-size:.75rem;letter-spacing:.05em;border-bottom:1px solid var(--border)}
+.bin-table td{padding:11px 14px;border-bottom:1px solid rgba(59,130,246,.07);vertical-align:top}
+.bin-table tr:hover td{background:rgba(59,130,246,.04)}
+.bin-table .desc{font-family:'Inter',sans-serif;font-size:.8rem;color:var(--muted)}
+
+/* ── Code blocks ─────────────────────────────────────────────── */
+pre{background:#060d1a;border:1px solid var(--border);border-radius:10px;padding:20px 24px;
+  font-family:var(--mono);font-size:.78rem;line-height:1.7;overflow-x:auto}
+.kw{color:#c792ea}.fn{color:#82aaff}.str{color:#c3e88d}.num{color:#f78c6c}
+.cmt{color:#485e74;font-style:italic}.ty{color:#ffcb6b}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIMULATION SLIDES
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Simulation wrapper ──────────────────────────────────────── */
+.sim-wrapper{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:14px;
+  padding:28px;position:relative;overflow:hidden;
+}
+.sim-wrapper::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3));
+}
+.sim-title{
+  display:flex;align-items:center;gap:12px;margin-bottom:20px;
+}
+.sim-title h4{font-size:.9rem;font-weight:700}
+.sim-badge{font-family:var(--mono);font-size:.7rem;padding:3px 10px;border-radius:4px;
+  background:rgba(59,130,246,.15);color:var(--accent)}
+.sim-ctrl{
+  display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;
+}
+.btn{
+  font-family:var(--mono);font-size:.75rem;padding:7px 18px;border-radius:7px;
+  border:1px solid var(--border);background:var(--bg-card2);color:var(--text);
+  cursor:pointer;transition:all .18s;font-weight:600;letter-spacing:.03em;
+}
+.btn:hover{background:rgba(59,130,246,.18);border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:#2563eb;border-color:#2563eb;color:#fff}
+.btn-danger{background:rgba(239,68,68,.12);border-color:var(--red);color:var(--red)}
+.btn-danger:hover{background:rgba(239,68,68,.25)}
+.btn-gold{background:rgba(245,158,11,.12);border-color:var(--gold);color:var(--gold)}
+.btn-gold:hover{background:rgba(245,158,11,.25)}
+
+/* ── Terminal log ────────────────────────────────────────────── */
+.terminal{
+  background:#020509;border:1px solid rgba(59,130,246,.15);border-radius:8px;
+  padding:16px 18px;font-family:var(--mono);font-size:.75rem;line-height:1.75;
+  min-height:140px;max-height:220px;overflow-y:auto;
+}
+.log-ok{color:var(--accent3)}.log-err{color:var(--red)}.log-warn{color:var(--gold)}
+.log-info{color:var(--accent)}.log-muted{color:#485e74}.log-step{color:var(--accent2)}
+
+/* ── Packet animation canvas wrapper ────────────────────────── */
+.canvas-wrap{position:relative;width:100%;height:160px;background:#030710;
+  border-radius:8px;overflow:hidden;border:1px solid rgba(59,130,246,.12)}
+
+/* ── Radial gauge ────────────────────────────────────────────── */
+.gauge-wrap{display:flex;align-items:center;gap:32px}
+.gauge-svg{flex-shrink:0}
+.gauge-info{flex:1}
+.gauge-info h4{font-size:.9rem;font-weight:700;margin-bottom:8px}
+.gauge-info p{font-size:.8rem;color:var(--muted)}
+
+/* ── Progress bars ───────────────────────────────────────────── */
+.metric-row{margin-bottom:16px}
+.metric-label{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:6px;font-family:var(--mono)}
+.metric-label span:last-child{color:var(--accent)}
+.bar-track{background:rgba(255,255,255,.06);border-radius:20px;height:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:20px;transition:width 1s cubic-bezier(.22,.68,0,1.2)}
+
+/* ── Attack matrix table ─────────────────────────────────────── */
+.attack-table{width:100%;border-collapse:collapse;font-size:.83rem}
+.attack-table th{background:var(--bg-card2);color:var(--muted);padding:10px 14px;text-align:left;
+  font-size:.75rem;letter-spacing:.06em;border-bottom:1px solid var(--border);font-family:var(--mono)}
+.attack-table td{padding:13px 14px;border-bottom:1px solid rgba(59,130,246,.06)}
+.attack-table tr:last-child td{border-bottom:none}
+.attack-table tr:hover td{background:rgba(59,130,246,.04)}
+.status-pass{color:var(--accent3);font-family:var(--mono);font-size:.75rem;font-weight:700}
+.status-fail{color:var(--red);font-family:var(--mono);font-size:.75rem;font-weight:700}
+.status-pending{color:var(--gold);font-family:var(--mono);font-size:.75rem;font-weight:700}
+
+/* ── Live dashboard ──────────────────────────────────────────── */
+.dashboard{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.dash-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:22px}
+.dash-card h4{font-size:.85rem;font-weight:700;color:var(--muted);margin-bottom:14px;
+  font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+
+/* ── Donut chart ─────────────────────────────────────────────── */
+.donut-wrap{display:flex;align-items:center;gap:24px}
+.donut-legend{flex:1}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:.78rem;margin-bottom:8px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* ── Sparkline ───────────────────────────────────────────────── */
+.sparkline-wrap{height:80px;position:relative}
+
+/* ── Divider ─────────────────────────────────────────────────── */
+hr.dv{border:none;border-top:1px solid rgba(59,130,246,.1);margin:28px 0}
+
+/* ── Threat indicator ────────────────────────────────────────── */
+.threat-indicator{display:flex;align-items:center;gap:14px;padding:14px 18px;
+  border-radius:10px;background:var(--bg-card2);border:1px solid var(--border);margin-bottom:10px}
+.ti-icon{font-size:1.3rem;flex-shrink:0}
+.ti-content{flex:1}
+.ti-content h4{font-size:.85rem;font-weight:600;margin-bottom:2px}
+.ti-content p{font-size:.76rem;color:var(--muted)}
+.ti-status{font-family:var(--mono);font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:5px;white-space:nowrap}
+.tis-block{background:rgba(239,68,68,.15);color:var(--red)}
+.tis-pass{background:rgba(16,185,129,.15);color:var(--accent3)}
+.tis-pending{background:rgba(245,158,11,.15);color:var(--gold)}
+
+/* ── Final ───────────────────────────────────────────────────── */
+.slide-final{align-items:center;text-align:center;
+  background:radial-gradient(ellipse 60% 50% at 50% 50%,rgba(59,130,246,.08) 0%,transparent 70%)}
+.final-h2{font-size:clamp(1.8rem,4vw,2.8rem);font-weight:900;letter-spacing:-.025em;margin-bottom:16px}
+
+@media(max-width:900px){
+  .slide{padding:72px 28px 56px}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .flow{flex-direction:column}
+  .flow-arrow{transform:rotate(90deg)}
+  .dashboard{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav>
+  <span class="nav-logo">OTA-VERIFIER</span>
+  <div class="nav-links">
+    <a href="#slide-title"   class="active">Intro</a>
+    <a href="#slide-problem">Problem</a>
+    <a href="#slide-arch">Architecture</a>
+    <a href="#slide-format">Format</a>
+    <a href="#slide-crypto">Crypto</a>
+    <a href="#slide-sim1">Boot Sim</a>
+    <a href="#slide-dashboard">Dashboard</a>
+    <a href="#slide-attacks">Attacks</a>
+    <a href="#slide-tests">Tests</a>
+    <a href="#slide-final">Summary</a>
+  </div>
+</nav>
+
+<!-- ═══════════════ SLIDE 1: TITLE ═══════════════ -->
+<section class="slide slide-hero" id="slide-title">
+  <div class="hero-badge">Security Engineering — ECU Firmware</div>
+  <h1 class="hero-h1">Embedded Secure Boot<br>&amp; OTA Update Verifier</h1>
+  <p class="hero-sub">
+    A Rust simulation of a vehicle ECU bootloader that cryptographically authenticates
+    firmware before execution — defending against physical, network, and downgrade attacks.
+  </p>
+  <div class="pill-row">
+    <span class="pill">Rust</span>
+    <span class="pill">Ed25519</span>
+    <span class="pill">SHA-256</span>
+    <span class="pill">Embedded / ECU</span>
+    <span class="pill">OTA Security</span>
+    <span class="pill">Anti-Rollback</span>
+    <span class="pill">2 Crates · 1 Workspace</span>
+  </div>
+
+  <!-- Live animated counters -->
+  <div class="stat-grid" style="margin-top:48px;max-width:700px">
+    <div class="stat-box">
+      <span class="stat-val" id="cnt-sig">0</span>
+      <div class="stat-lbl">Signature bytes<br>(Ed25519)</div>
+    </div>
+    <div class="stat-box">
+      <span class="stat-val" id="cnt-hash">0</span>
+      <div class="stat-lbl">Hash bits<br>(SHA-256)</div>
+    </div>
+    <div class="stat-box">
+      <span class="stat-val" id="cnt-threats">0</span>
+      <div class="stat-lbl">Threats<br>mitigated</div>
+    </div>
+    <div class="stat-box">
+      <span class="stat-val" id="cnt-tests">0</span>
+      <div class="stat-lbl">Integration<br>test scenarios</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 2: PROBLEM ═══════════════ -->
+<section class="slide" id="slide-problem">
+  <span class="slide-num">02 / 10</span>
+  <div class="section-label">Problem Statement</div>
+  <h2 class="slide-title">Why does firmware <span>authenticity</span> matter?</h2>
+  <p class="slide-desc">Modern vehicles run 100+ ECUs with millions of lines of firmware. A single unsigned update path is a critical attack surface.</p>
+
+  <div class="g3" style="margin-bottom:32px">
+    <div class="card bt-red">
+      <div style="font-size:1.5rem;margin-bottom:10px">🔌</div>
+      <h3>Physical Access</h3>
+      <p>Malicious firmware loaded via OBD-II / USB diagnostic port during servicing or theft.</p>
+    </div>
+    <div class="card bt-gold">
+      <div style="font-size:1.5rem;margin-bottom:10px">📡</div>
+      <h3>OTA Tampering</h3>
+      <p>Man-in-the-middle attack corrupts or replaces a genuine firmware image in transit.</p>
+    </div>
+    <div class="card bt-indigo">
+      <div style="font-size:1.5rem;margin-bottom:10px">⏪</div>
+      <h3>Downgrade Attack</h3>
+      <p>Attacker re-flashes an older signed image that contains known, exploitable vulnerabilities.</p>
+    </div>
+  </div>
+
+  <!-- Live threat-feed simulation -->
+  <div class="sim-wrapper">
+    <div class="sim-title">
+      <h4>Live Threat Feed Simulation</h4>
+      <span class="sim-badge">ANIMATED</span>
+    </div>
+    <div class="sim-ctrl">
+      <button class="btn btn-primary" onclick="startThreatFeed()">▶ Start Feed</button>
+      <button class="btn" onclick="clearThreatFeed()">⟳ Clear</button>
+    </div>
+    <div class="terminal" id="threat-log">
+      <span class="log-muted">// Press "Start Feed" to simulate incoming attack attempts...</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 3: ARCHITECTURE ═══════════════ -->
+<section class="slide" id="slide-arch">
+  <span class="slide-num">03 / 10</span>
+  <div class="section-label">Architecture</div>
+  <h2 class="slide-title">Two-component <span>secure boot</span> pipeline</h2>
+  <p class="slide-desc">Host-side signer packages firmware; device-side bootloader verifies before any code runs.</p>
+
+  <div class="flow" style="margin-bottom:32px">
+    <div class="flow-step"><span class="si">🔑</span><div class="sl">OEM Keys</div><div class="ss">Ed25519 keygen</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><span class="si">🛠️</span><div class="sl">firmware_signer</div><div class="ss">Host / CI</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><span class="si">📦</span><div class="sl">Signed Image</div><div class="ss">.signed.bin</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><span class="si">📡</span><div class="sl">OTA / USB</div><div class="ss">Delivery</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><span class="si">🔒</span><div class="sl">secure_bootloader</div><div class="ss">Device / ECU</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><span class="si">✅</span><div class="sl">Boot / Halt</div><div class="ss">Execute or reject</div></div>
+  </div>
+
+  <!-- Animated OTA packet demo -->
+  <div class="sim-wrapper">
+    <div class="sim-title">
+      <h4>OTA Packet Transmission &amp; Verification</h4>
+      <span class="sim-badge">INTERACTIVE</span>
+    </div>
+    <div class="sim-ctrl">
+      <button class="btn btn-primary" onclick="runPacketAnim('clean')">📦 Send Clean Image</button>
+      <button class="btn btn-danger"  onclick="runPacketAnim('tamper')">💣 Tamper &amp; Send</button>
+      <button class="btn btn-gold"    onclick="runPacketAnim('mitmkey')">🔑 Key Mismatch</button>
+    </div>
+    <canvas id="pkt-canvas" width="900" height="130" style="width:100%;height:130px;background:#030710;border-radius:8px;border:1px solid rgba(59,130,246,.12)"></canvas>
+    <div class="terminal" style="margin-top:12px;min-height:90px" id="pkt-log">
+      <span class="log-muted">// Choose a transmission scenario above...</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 4: FORMAT ═══════════════ -->
+<section class="slide" id="slide-format">
+  <span class="slide-num">04 / 10</span>
+  <div class="section-label">Image Format</div>
+  <h2 class="slide-title">Custom binary <span>firmware header</span></h2>
+  <p class="slide-desc">Parsed byte-by-byte. All multi-byte fields are little-endian.</p>
+
+  <div class="g2" style="align-items:start">
+    <div>
+      <table class="bin-table">
+        <thead><tr><th>Offset</th><th>Field</th><th>Size</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td style="color:var(--gold);font-weight:700">0x00</td><td style="color:var(--accent)">MAGIC_WORD</td><td style="color:var(--accent3)">4 B</td><td class="desc"><code>0x53 0x42 0x4F 0x54</code> "SBOT" — fast-fail guard</td></tr>
+          <tr><td style="color:var(--gold);font-weight:700">0x04</td><td style="color:var(--accent)">VERSION</td><td style="color:var(--accent3)">4 B</td><td class="desc"><code>uint32</code> monotonic. Anti-rollback counter.</td></tr>
+          <tr><td style="color:var(--gold);font-weight:700">0x08</td><td style="color:var(--accent)">PAYLOAD_SIZE</td><td style="color:var(--accent3)">4 B</td><td class="desc"><code>uint32</code> byte length of payload.</td></tr>
+          <tr><td style="color:var(--gold);font-weight:700">0x0C</td><td style="color:var(--accent)">SIGNATURE</td><td style="color:var(--accent3)">64 B</td><td class="desc">Ed25519 signature over <code>SHA-256(payload)</code>.</td></tr>
+          <tr><td style="color:var(--gold);font-weight:700">0x4C</td><td style="color:var(--accent)">PAYLOAD</td><td style="color:var(--accent3)">var</td><td class="desc">Executable firmware binary.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="bin-bar">
+        <div class="bs" style="width:4%; background:#1c3660;color:#93c5fd">MAGIC</div>
+        <div class="bs" style="width:4%; background:#1c3660;color:#93c5fd">VER</div>
+        <div class="bs" style="width:4%; background:#1c3660;color:#93c5fd">SIZE</div>
+        <div class="bs" style="width:20%;background:#2a2a0a;color:#fbbf24">SIGNATURE (64 bytes)</div>
+        <div class="bs" style="width:68%;background:#0a2b1c;color:#34d399;font-size:.65rem">PAYLOAD — variable length firmware binary</div>
+      </div>
+    </div>
+
+    <!-- Interactive hex inspector -->
+    <div class="sim-wrapper" style="margin:0">
+      <div class="sim-title"><h4>Header Hex Inspector</h4><span class="sim-badge">INTERACTIVE</span></div>
+      <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px">Set VERSION and hover a field to decode it.</p>
+      <div class="sim-ctrl" style="margin-bottom:12px">
+        <label style="font-size:.76rem;color:var(--muted);font-family:var(--mono)">VERSION</label>
+        <input id="hdr-version" type="number" min="1" max="99" value="3"
+          style="width:60px;background:var(--bg-card2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-family:var(--mono);font-size:.76rem"
+          oninput="renderHexDump()"/>
+        <button class="btn" onclick="renderHexDump()">Render</button>
+      </div>
+      <div id="hex-dump" style="font-family:var(--mono);font-size:.71rem;line-height:1.9;background:#020509;border-radius:8px;padding:14px 16px;border:1px solid rgba(59,130,246,.1)"></div>
+      <div id="hex-tooltip" style="margin-top:10px;font-size:.76rem;color:var(--accent);font-family:var(--mono);min-height:18px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 5: CRYPTO ═══════════════ -->
+<section class="slide" id="slide-crypto">
+  <span class="slide-num">05 / 10</span>
+  <div class="section-label">Cryptographic Design</div>
+  <h2 class="slide-title">Algorithm <span>choices &amp; performance</span></h2>
+  <p class="slide-desc">Every choice is motivated by embedded constraints: small code size, fast verification, side-channel resistance.</p>
+
+  <div class="g2" style="margin-bottom:28px">
+    <div>
+      <div class="metric-row">
+        <div class="metric-label"><span>Ed25519 — Signature size</span><span id="m1v">64 B</span></div>
+        <div class="bar-track"><div class="bar-fill" id="m1b" style="width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2))"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-label"><span>SHA-256 — Digest size</span><span id="m2v">32 B</span></div>
+        <div class="bar-track"><div class="bar-fill" id="m2b" style="width:0%;background:linear-gradient(90deg,var(--accent3),#06b6d4)"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-label"><span>Ed25519 — Verify speed</span><span id="m3v">~100k ops/s</span></div>
+        <div class="bar-track"><div class="bar-fill" id="m3b" style="width:0%;background:linear-gradient(90deg,var(--gold),var(--red))"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-label"><span>RSA-2048 — Verify speed (ref)</span><span id="m4v">~10k ops/s</span></div>
+        <div class="bar-track"><div class="bar-fill" id="m4b" style="width:0%;background:rgba(255,255,255,.15)"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-label"><span>Side-channel resistance</span><span id="m5v">100%</span></div>
+        <div class="bar-track"><div class="bar-fill" id="m5b" style="width:0%;background:linear-gradient(90deg,#a855f7,var(--accent2))"></div></div>
+      </div>
+      <button class="btn btn-primary" onclick="animateMetrics()" style="margin-top:8px">▶ Animate Metrics</button>
+    </div>
+    <div>
+      <div class="g2" style="gap:14px;margin-bottom:14px">
+        <div class="card bt-blue" style="padding:18px">
+          <h3 style="font-size:.8rem;margin-bottom:6px">Ed25519</h3>
+          <p>EdDSA over Curve25519. Constant-time signing &amp; verification. 64-byte signatures.</p>
+        </div>
+        <div class="card bt-green" style="padding:18px">
+          <h3 style="font-size:.8rem;margin-bottom:6px">SHA-256</h3>
+          <p>Payload hash. Any single-bit flip changes the 32-byte digest entirely.</p>
+        </div>
+        <div class="card bt-indigo" style="padding:18px">
+          <h3 style="font-size:.8rem;margin-bottom:6px">Rust</h3>
+          <p>Memory-safe header parsing. No buffer overflows by construction.</p>
+        </div>
+        <div class="card bt-gold" style="padding:18px">
+          <h3 style="font-size:.8rem;margin-bottom:6px">ed25519-dalek</h3>
+          <p>ZIP-215 point validation. Returns <code>Result</code>, never panics.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hash avalanche visualizer -->
+  <div class="sim-wrapper">
+    <div class="sim-title"><h4>SHA-256 Avalanche Effect Visualizer</h4><span class="sim-badge">INTERACTIVE</span></div>
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:14px">Edit the payload — even one character change completely rewrites the hash. This is what makes signature forgery impossible.</p>
+    <div class="sim-ctrl">
+      <input id="avalanche-input" type="text" value="firmware_v3_ECU_main.bin"
+        style="flex:1;background:var(--bg-card2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 14px;font-family:var(--mono);font-size:.8rem"
+        oninput="updateAvalanche()"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px">
+      <div>
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--mono);margin-bottom:6px">SHA-256 DIGEST (hex)</div>
+        <div id="av-hash" style="font-family:var(--mono);font-size:.72rem;word-break:break-all;line-height:1.8;background:#020509;border-radius:6px;padding:10px 12px;border:1px solid rgba(59,130,246,.1)"></div>
+      </div>
+      <div>
+        <div style="font-size:.72rem;color:var(--muted);font-family:var(--mono);margin-bottom:6px">BIT CHANGE HEATMAP</div>
+        <canvas id="av-canvas" width="400" height="64" style="width:100%;height:64px;border-radius:6px;border:1px solid rgba(59,130,246,.1)"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 6: BOOT SIMULATION ═══════════════ -->
+<section class="slide" id="slide-sim1">
+  <span class="slide-num">06 / 10</span>
+  <div class="section-label">Live Simulation</div>
+  <h2 class="slide-title">Interactive <span>boot sequence</span> simulation</h2>
+  <p class="slide-desc">Step through exactly what the <code>secure_bootloader</code> executes. Choose a scenario to see how each attack is stopped.</p>
+
+  <div class="g2" style="align-items:start">
+    <div class="sim-wrapper" style="margin:0">
+      <div class="sim-title"><h4>Boot Scenario</h4><span class="sim-badge">STEP-BY-STEP</span></div>
+      <div class="sim-ctrl" style="flex-direction:column;align-items:stretch;gap:8px">
+        <button class="btn btn-primary" onclick="runBootSim('golden')">✅  Golden Path — Valid firmware, correct key, version OK</button>
+        <button class="btn btn-danger"  onclick="runBootSim('tamper')">🔨  Tamper Attack — Payload bit flipped post-signing</button>
+        <button class="btn btn-danger"  onclick="runBootSim('keymismatch')">🔑  Key Mismatch — Signed with A, verified with B</button>
+        <button class="btn btn-gold"    onclick="runBootSim('downgrade')">⏪  Downgrade Attack — Image v1, device counter = v2</button>
+        <button class="btn btn-danger"  onclick="runBootSim('badmagic')">🚫  Bad Magic — Not an SBOT image at all</button>
+      </div>
+    </div>
+
+    <div class="sim-wrapper" style="margin:0">
+      <div class="sim-title"><h4>Bootloader Output</h4><span class="sim-badge" id="boot-status-badge" style="background:rgba(245,158,11,.15);color:var(--gold)">IDLE</span></div>
+      <div class="terminal" id="boot-log" style="min-height:320px;max-height:320px">
+        <span class="log-muted">// Select a scenario on the left to run the simulation...</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 7: DASHBOARD ═══════════════ -->
+<section class="slide" id="slide-dashboard">
+  <span class="slide-num">07 / 10</span>
+  <div class="section-label">Security Dashboard</div>
+  <h2 class="slide-title">ECU boot <span>metrics</span> &amp; threat analytics</h2>
+  <p class="slide-desc">Live simulated telemetry — what an OEM security operations center would monitor across a fleet.</p>
+
+  <div class="sim-ctrl" style="margin-bottom:20px">
+    <button class="btn btn-primary" onclick="startDashboard()">▶ Start Live Telemetry</button>
+    <button class="btn" onclick="stopDashboard()">⏸ Pause</button>
+    <button class="btn" onclick="resetDashboard()">⟳ Reset</button>
+    <span style="font-family:var(--mono);font-size:.75rem;color:var(--muted)" id="db-tick">tick: 0</span>
+  </div>
+
+  <div class="dashboard">
+    <!-- Verification success donut -->
+    <div class="dash-card">
+      <h4>Boot Verification Results</h4>
+      <div class="donut-wrap">
+        <canvas id="donut-canvas" width="120" height="120"></canvas>
+        <div class="donut-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div><span>Success <b id="d-pass">0</b></span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div><span>Sig Fail <b id="d-sigfail">0</b></span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div><span>Downgrade <b id="d-down">0</b></span></div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div><span>Bad Magic <b id="d-magic">0</b></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sparkline: verifications per second -->
+    <div class="dash-card">
+      <h4>Verification Events / Tick</h4>
+      <div class="sparkline-wrap">
+        <canvas id="spark-canvas" width="400" height="80" style="width:100%;height:80px"></canvas>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-top:6px;font-family:var(--mono)">
+        <span>Total events: <b id="db-total" style="color:var(--text)">0</b></span>
+        <span>Attack rate: <b id="db-rate" style="color:var(--red)">0%</b></span>
+      </div>
+    </div>
+
+    <!-- Threat breakdown bars -->
+    <div class="dash-card">
+      <h4>Threat Category Breakdown</h4>
+      <div id="threat-bars">
+        <div class="metric-row">
+          <div class="metric-label"><span>Signature Mismatch</span><span id="tb-sig">0</span></div>
+          <div class="bar-track"><div class="bar-fill" id="tb-sig-bar" style="width:0%;background:linear-gradient(90deg,var(--red),#ff6b6b)"></div></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label"><span>Downgrade Attempts</span><span id="tb-down">0</span></div>
+          <div class="bar-track"><div class="bar-fill" id="tb-down-bar" style="width:0%;background:linear-gradient(90deg,var(--gold),#fbbf24)"></div></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label"><span>Invalid Magic</span><span id="tb-magic">0</span></div>
+          <div class="bar-track"><div class="bar-fill" id="tb-magic-bar" style="width:0%;background:linear-gradient(90deg,var(--accent2),var(--purple))"></div></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label"><span>Successful Boots</span><span id="tb-pass">0</span></div>
+          <div class="bar-track"><div class="bar-fill" id="tb-pass-bar" style="width:0%;background:linear-gradient(90deg,var(--accent3),#06b6d4)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent events log -->
+    <div class="dash-card">
+      <h4>Recent Event Log</h4>
+      <div class="terminal" id="db-log" style="min-height:140px;max-height:180px">
+        <span class="log-muted">// Waiting for telemetry...</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 8: ATTACKS ═══════════════ -->
+<section class="slide" id="slide-attacks">
+  <span class="slide-num">08 / 10</span>
+  <div class="section-label">Threat Model</div>
+  <h2 class="slide-title">Three attack vectors — <span>one defence each</span></h2>
+  <p class="slide-desc">Run each attack live and observe the bootloader's response.</p>
+
+  <div class="g3" style="margin-bottom:28px">
+    <div>
+      <div class="threat-indicator">
+        <span class="ti-icon">🔌</span>
+        <div class="ti-content"><h4>Malicious USB Flash</h4><p>Custom firmware via OBD-II diagnostic port</p></div>
+        <span class="ti-status tis-block" id="ti1">BLOCKED</span>
+      </div>
+      <div class="threat-indicator">
+        <span class="ti-icon">📡</span>
+        <div class="ti-content"><h4>OTA Tampering</h4><p>MitM corrupts payload in transit</p></div>
+        <span class="ti-status tis-block" id="ti2">BLOCKED</span>
+      </div>
+      <div class="threat-indicator">
+        <span class="ti-icon">⏪</span>
+        <div class="ti-content"><h4>Version Downgrade</h4><p>Re-flash older signed image (CVEs)</p></div>
+        <span class="ti-status tis-block" id="ti3">BLOCKED</span>
+      </div>
+    </div>
+
+    <div class="g2" style="grid-column:span 2;align-items:start">
+      <div class="sim-wrapper" style="margin:0">
+        <div class="sim-title"><h4>Attack Replay</h4><span class="sim-badge">INTERACTIVE</span></div>
+        <div class="sim-ctrl" style="flex-direction:column;align-items:stretch;gap:8px">
+          <button class="btn btn-danger"  onclick="replayAttack('usb')">🔌  Simulate USB Flash Attack</button>
+          <button class="btn btn-danger"  onclick="replayAttack('ota')">📡  Simulate OTA Tamper</button>
+          <button class="btn btn-gold"    onclick="replayAttack('downgrade')">⏪  Simulate Downgrade</button>
+        </div>
+      </div>
+      <div class="sim-wrapper" style="margin:0">
+        <div class="sim-title"><h4>Bootloader Response</h4></div>
+        <div class="terminal" id="attack-log" style="min-height:180px">
+          <span class="log-muted">// Waiting for attack simulation...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attack summary table -->
+  <table class="attack-table">
+    <thead>
+      <tr><th>Threat</th><th>Vector</th><th>Detection Point</th><th>Mitigation</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Malicious USB Flash</b></td>
+        <td>Physical port</td>
+        <td>Ed25519 signature check</td>
+        <td>No OEM private key → can't forge signature</td>
+        <td class="status-pass">✓ BLOCKED</td>
+      </tr>
+      <tr>
+        <td><b>OTA Tampering</b></td>
+        <td>Network / MitM</td>
+        <td>SHA-256 hash mismatch</td>
+        <td>Any 1-bit change invalidates signature</td>
+        <td class="status-pass">✓ BLOCKED</td>
+      </tr>
+      <tr>
+        <td><b>Version Downgrade</b></td>
+        <td>Replay signed image</td>
+        <td>VERSION vs stored counter</td>
+        <td>Monotonic counter rejects older versions</td>
+        <td class="status-pass">✓ BLOCKED</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════ SLIDE 9: TESTS ═══════════════ -->
+<section class="slide" id="slide-tests">
+  <span class="slide-num">09 / 10</span>
+  <div class="section-label">Quality Assurance</div>
+  <h2 class="slide-title"><span>Test runner</span> — all four scenarios</h2>
+  <p class="slide-desc">All integration tests run via <code>cargo test --workspace</code>. Click to replay each test in the terminal.</p>
+
+  <div class="g2" style="align-items:start">
+    <div>
+      <div class="sim-ctrl" style="margin-bottom:16px">
+        <button class="btn btn-primary" onclick="runAllTests()">▶ Run All Tests</button>
+        <button class="btn" onclick="clearTests()">⟳ Clear</button>
+        <span style="font-family:var(--mono);font-size:.75rem;color:var(--muted)" id="test-summary"></span>
+      </div>
+
+      <table class="attack-table" id="test-table">
+        <thead>
+          <tr><th>#</th><th>Test Name</th><th>Scenario</th><th>Expected</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr id="tr-golden">
+            <td style="color:var(--muted);font-family:var(--mono)">1</td>
+            <td><b>golden_path</b></td>
+            <td style="font-size:.78rem;color:var(--muted)">Valid binary, correct key, version ≥ stored</td>
+            <td><span class="tag tg-green">EXIT 0</span></td>
+            <td id="tr-golden-r" class="status-pending">—</td>
+          </tr>
+          <tr id="tr-tamper">
+            <td style="color:var(--muted);font-family:var(--mono)">2</td>
+            <td><b>tamper</b></td>
+            <td style="font-size:.78rem;color:var(--muted)">One bit flipped in payload at 0x4C</td>
+            <td><span class="tag tg-red">EXIT 1 / FATAL</span></td>
+            <td id="tr-tamper-r" class="status-pending">—</td>
+          </tr>
+          <tr id="tr-keymismatch">
+            <td style="color:var(--muted);font-family:var(--mono)">3</td>
+            <td><b>key_mismatch</b></td>
+            <td style="font-size:.78rem;color:var(--muted)">Signed with Key A, verified with Key B</td>
+            <td><span class="tag tg-red">EXIT 1 / FATAL</span></td>
+            <td id="tr-keymismatch-r" class="status-pending">—</td>
+          </tr>
+          <tr id="tr-downgrade">
+            <td style="color:var(--muted);font-family:var(--mono)">4</td>
+            <td><b>downgrade</b></td>
+            <td style="font-size:.78rem;color:var(--muted)">stored_version=2, image VERSION=1</td>
+            <td><span class="tag tg-red">EXIT 1 / FATAL</span></td>
+            <td id="tr-downgrade-r" class="status-pending">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sim-wrapper" style="margin:0">
+      <div class="sim-title"><h4>Test Output</h4><span class="sim-badge" id="test-badge" style="background:rgba(245,158,11,.15);color:var(--gold)">IDLE</span></div>
+      <div class="terminal" id="test-log" style="min-height:300px;max-height:350px">
+        <span class="log-muted">// Press "Run All Tests" or click a row...</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SLIDE 10: SUMMARY ═══════════════ -->
+<section class="slide slide-final" id="slide-final">
+  <span class="slide-num">10 / 10</span>
+  <div class="section-label" style="margin-bottom:14px">Summary</div>
+  <h2 class="final-h2">Secure. Verifiable. Production-Ready Pattern.</h2>
+  <p style="color:var(--muted);font-size:1rem;max-width:600px;margin:0 auto 40px">
+    A complete end-to-end automotive secure boot chain — from signing at build time to verification at boot time — with interactive simulations, live telemetry, and full test coverage.
+  </p>
+
+  <div class="stat-grid" style="max-width:860px;margin:0 auto 40px">
+    <div class="stat-box"><span class="stat-val">Ed25519</span><div class="stat-lbl">64-byte sigs<br>constant-time</div></div>
+    <div class="stat-box"><span class="stat-val">SHA-256</span><div class="stat-lbl">32-byte digest<br>avalanche effect</div></div>
+    <div class="stat-box"><span class="stat-val">3</span><div class="stat-lbl">threats mitigated<br>USB · OTA · Rollback</div></div>
+    <div class="stat-box"><span class="stat-val">4</span><div class="stat-lbl">integration tests<br>all scenarios covered</div></div>
+  </div>
+
+  <div class="pill-row" style="justify-content:center">
+    <span class="pill">cargo build --workspace</span>
+    <span class="pill">cargo test --workspace</span>
+    <span class="pill">firmware_signer keygen</span>
+    <span class="pill">firmware_signer sign --version N</span>
+    <span class="pill">secure_bootloader --image</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     JAVASCRIPT — ALL SIMULATIONS
+════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ── Smooth nav highlighting ──────────────────────────────────────────────
+const slides = document.querySelectorAll('.slide');
+const navLinks = document.querySelectorAll('.nav-links a');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  slides.forEach(s => { if (window.scrollY >= s.offsetTop - 120) cur = s.id; });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + cur);
+  });
+}, { passive: true });
+
+// ── Animate hero counters ────────────────────────────────────────────────
+function animCount(id, target, suffix = '') {
+  const el = document.getElementById(id);
+  let v = 0, step = Math.ceil(target / 40);
+  const t = setInterval(() => {
+    v = Math.min(v + step, target);
+    el.textContent = v + suffix;
+    if (v >= target) clearInterval(t);
+  }, 30);
+}
+const heroObs = new IntersectionObserver(([e]) => {
+  if (e.isIntersecting) {
+    animCount('cnt-sig', 64, 'B');
+    animCount('cnt-hash', 256, 'b');
+    animCount('cnt-threats', 3);
+    animCount('cnt-tests', 4);
+    heroObs.disconnect();
+  }
+}, { threshold: .3 });
+heroObs.observe(document.getElementById('slide-title'));
+
+// ── Crypto metrics bars ──────────────────────────────────────────────────
+function animateMetrics() {
+  const bars = [
+    { id: 'm1b', pct: 32 },
+    { id: 'm2b', pct: 16 },
+    { id: 'm3b', pct: 100 },
+    { id: 'm4b', pct: 10 },
+    { id: 'm5b', pct: 100 },
+  ];
+  bars.forEach((b, i) => {
+    setTimeout(() => {
+      document.getElementById(b.id).style.width = b.pct + '%';
+    }, i * 120);
+  });
+}
+const cryptoObs = new IntersectionObserver(([e]) => {
+  if (e.isIntersecting) { animateMetrics(); cryptoObs.disconnect(); }
+}, { threshold: .3 });
+const cryptoSlide = document.getElementById('slide-crypto');
+if (cryptoSlide) cryptoObs.observe(cryptoSlide);
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function appendLog(logId, html) {
+  const el = document.getElementById(logId);
+  if (!el) return;
+  el.innerHTML += html + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+function setLog(logId, html) {
+  const el = document.getElementById(logId);
+  if (el) el.innerHTML = html;
+}
+
+function ts() {
+  const n = new Date();
+  const pad = v => String(v).padStart(2,'0');
+  return `<span class="log-muted">[${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}]</span> `;
+}
+
+// ── SIMULATION 1: Threat feed ────────────────────────────────────────────
+let threatFeedTimer = null;
+const threatEvents = [
+  ['log-err',  '🔌 USB_DIAG: Unsigned image detected on port OBD-II-A. Signature absent.'],
+  ['log-ok',   '✅ OTA_UPDATE: Image v4 verified. SHA-256 match. Booting.'],
+  ['log-warn', '⏪ DOWNGRADE: Image v1 rejected — stored counter = 3.'],
+  ['log-err',  '📡 MitM_ALERT: Payload CRC mismatch. SIGNATURE FAIL. Image discarded.'],
+  ['log-ok',   '✅ OTA_UPDATE: Image v5 verified. Ed25519 OK. Booting.'],
+  ['log-err',  '🔑 KEY_MISMATCH: Signature cannot be verified with OEM public key.'],
+  ['log-warn', '⏪ DOWNGRADE: Image v2 rejected — stored counter = 4.'],
+  ['log-ok',   '✅ OTA_UPDATE: Image v6 verified. Clean boot.'],
+  ['log-err',  '🚫 BAD_MAGIC: Image header missing "SBOT". Not an OEM image.'],
+  ['log-ok',   '✅ OTA_UPDATE: Image v7 verified. Anti-rollback OK. Booting.'],
+];
+let threatIdx = 0;
+function startThreatFeed() {
+  clearThreatFeed();
+  threatIdx = 0;
+  threatFeedTimer = setInterval(() => {
+    const [cls, msg] = threatEvents[threatIdx % threatEvents.length];
+    appendLog('threat-log', ts() + `<span class="${cls}">${msg}</span>`);
+    threatIdx++;
+  }, 900);
+}
+function clearThreatFeed() {
+  if (threatFeedTimer) clearInterval(threatFeedTimer);
+  setLog('threat-log', '<span class="log-muted">// Feed cleared.</span>');
+}
+
+// ── SIMULATION 2: OTA packet canvas animation ────────────────────────────
+let pktAnim = null;
+function runPacketAnim(mode) {
+  if (pktAnim) cancelAnimationFrame(pktAnim);
+  const canvas = document.getElementById('pkt-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+  canvas.height = 130 * (window.devicePixelRatio || 1);
+  ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+  const W = canvas.offsetWidth, H = 130;
+
+  // Labels
+  const nodes = [
+    { x: 60, y: 65, label: 'OTA Server', color: '#3b82f6' },
+    { x: W/2, y: 65, label: 'Network', color: '#6366f1' },
+    { x: W - 60, y: 65, label: 'ECU Bootloader', color: '#10b981' },
+  ];
+
+  let pkt = { x: 60, progress: 0, done: false, tampered: false };
+  const logEl = document.getElementById('pkt-log');
+
+  let logWritten = false;
+  function drawFrame() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw lines
+    ctx.strokeStyle = 'rgba(59,130,246,.18)';
+    ctx.lineWidth = 1.5;
+    nodes.forEach((n, i) => {
+      if (i < nodes.length - 1) {
+        ctx.beginPath(); ctx.moveTo(n.x, n.y); ctx.lineTo(nodes[i+1].x, n.y); ctx.stroke();
+      }
+    });
+
+    // Draw nodes
+    nodes.forEach(n => {
+      ctx.beginPath(); ctx.arc(n.x, n.y, 18, 0, Math.PI*2);
+      ctx.fillStyle = n.color + '22'; ctx.fill();
+      ctx.strokeStyle = n.color; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#e2e8f0'; ctx.font = '10px Inter,sans-serif';
+      ctx.textAlign = 'center'; ctx.fillText(n.label, n.x, n.y + 34);
+    });
+
+    // Move packet
+    if (!pkt.done) {
+      pkt.progress += 1.2;
+      const midX = W/2;
+      // Tamper happens at midpoint
+      if (mode === 'tamper' && pkt.progress > (midX - 60) * 100/(W - 120) * 0.5 && !pkt.tampered) {
+        pkt.tampered = true;
+      }
+      pkt.x = 60 + (pkt.progress / 100) * (W - 120);
+
+      const pktColor = pkt.tampered ? '#ef4444' : (mode === 'mitmkey' && pkt.progress > 50 ? '#f59e0b' : '#3b82f6');
+      ctx.beginPath(); ctx.roundRect(pkt.x - 18, 50, 36, 30, 5);
+      ctx.fillStyle = pktColor + '33'; ctx.fill();
+      ctx.strokeStyle = pktColor; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = pktColor; ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center'; ctx.fillText('PKT', pkt.x, 69);
+
+      // Tamper indicator
+      if (pkt.tampered) {
+        ctx.fillStyle = '#ef4444'; ctx.font = 'bold 11px sans-serif';
+        ctx.fillText('⚡', pkt.x, 46);
+      }
+
+      if (pkt.progress >= 100) {
+        pkt.done = true;
+        if (!logWritten) {
+          logWritten = true;
+          setLog('pkt-log', '');
+          if (mode === 'clean') {
+            appendLog('pkt-log', ts() + '<span class="log-info">Packet received at ECU.</span>');
+            appendLog('pkt-log', ts() + '<span class="log-info">Parsing header: MAGIC=SBOT ✓</span>');
+            appendLog('pkt-log', ts() + '<span class="log-info">SHA-256(payload) → d4e5f6...</span>');
+            appendLog('pkt-log', ts() + '<span class="log-ok">[SUCCESS] Ed25519 signature verified. Booting image...</span>');
+          } else if (mode === 'tamper') {
+            appendLog('pkt-log', ts() + '<span class="log-info">Packet received at ECU.</span>');
+            appendLog('pkt-log', ts() + '<span class="log-warn">⚡ 1 bit flipped in payload during transit</span>');
+            appendLog('pkt-log', ts() + '<span class="log-info">SHA-256(payload) → a1b2c3... <i>(diverged from signed hash)</i></span>');
+            appendLog('pkt-log', ts() + '<span class="log-err">[FATAL] Signature mismatch. Halting.</span>');
+          } else if (mode === 'mitmkey') {
+            appendLog('pkt-log', ts() + '<span class="log-info">Packet received. Signed with ATTACKER key.</span>');
+            appendLog('pkt-log', ts() + '<span class="log-info">ECU holds OEM public key (hardcoded in ROM).</span>');
+            appendLog('pkt-log', ts() + '<span class="log-err">[FATAL] Signature mismatch. Halting.</span>');
+          }
+        }
+      }
+    } else {
+      // Show result flash at ECU
+      const ecuX = W - 60;
+      const resColor = mode === 'clean' ? '#10b981' : '#ef4444';
+      ctx.beginPath(); ctx.arc(ecuX, 65, 22, 0, Math.PI*2);
+      ctx.fillStyle = resColor + '30'; ctx.fill();
+      ctx.strokeStyle = resColor; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.fillStyle = resColor; ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center'; ctx.fillText(mode === 'clean' ? '✓' : '✗', ecuX, 70);
+    }
+
+    if (!pkt.done) pktAnim = requestAnimationFrame(drawFrame);
+  }
+  setLog('pkt-log', '<span class="log-muted">// Transmitting...</span>');
+  pkt = { x: 60, progress: 0, done: false, tampered: false };
+  logWritten = false;
+  drawFrame();
+}
+
+// ── SIMULATION 3: Hex dump inspector ────────────────────────────────────
+const HEX_FIELDS = [
+  { name: 'MAGIC_WORD', offset: 0, len: 4, color: '#3b82f6', tip: 'MAGIC: 0x53424F54 — ASCII "SBOT". Bootloader halts immediately if this doesn\'t match.' },
+  { name: 'VERSION',    offset: 4, len: 4, color: '#f59e0b', tip: 'VERSION: uint32 little-endian. Compared against stored_version.txt for anti-rollback.' },
+  { name: 'PAYLOAD_SIZE', offset: 8, len: 4, color: '#10b981', tip: 'PAYLOAD_SIZE: uint32 little-endian. Number of bytes of firmware after the header.' },
+  { name: 'SIGNATURE',  offset: 12, len: 64, color: '#a855f7', tip: 'SIGNATURE: 64-byte Ed25519 signature over SHA-256(payload). Core integrity field.' },
+  { name: 'PAYLOAD',    offset: 76, len: 12, color: '#6366f1', tip: 'PAYLOAD: First bytes of actual firmware binary (truncated). Variable length.' },
+];
+function renderHexDump() {
+  const version = parseInt(document.getElementById('hdr-version').value) || 1;
+  // Build a fake 88-byte header
+  const buf = new Uint8Array(88);
+  buf[0]=0x53; buf[1]=0x42; buf[2]=0x4F; buf[3]=0x54; // MAGIC
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(4, version, true);    // VERSION LE
+  dv.setUint32(8, 0x200, true);      // PAYLOAD_SIZE
+  // fake signature bytes
+  for (let i=12;i<76;i++) buf[i] = (i * 37 + version * 7) & 0xFF;
+  // fake payload bytes
+  for (let i=76;i<88;i++) buf[i] = (i * 13) & 0xFF;
+
+  const fieldAt = (offset) => {
+    for (const f of HEX_FIELDS) {
+      if (offset >= f.offset && offset < f.offset + Math.min(f.len, 16)) return f;
+    }
+    return null;
+  };
+
+  let html = '';
+  const perRow = 16;
+  for (let row = 0; row < Math.ceil(buf.length / perRow); row++) {
+    html += `<span class="log-muted">0x${(row*perRow).toString(16).padStart(4,'0')}</span>  `;
+    for (let col = 0; col < perRow; col++) {
+      const idx = row*perRow + col;
+      if (idx >= buf.length) break;
+      const f = fieldAt(idx);
+      const hex = buf[idx].toString(16).padStart(2,'0');
+      if (f) {
+        html += `<span style="color:${f.color};cursor:pointer" onmouseenter="document.getElementById('hex-tooltip').innerHTML='<b style=color:${f.color}>${f.name}</b>: ${f.tip.replace(/'/g,"&apos;")}';">${hex} </span>`;
+      } else {
+        html += `<span class="log-muted">${hex} </span>`;
+      }
+    }
+    html += '<br>';
+  }
+  document.getElementById('hex-dump').innerHTML = html;
+}
+window.addEventListener('load', renderHexDump);
+
+// ── SIMULATION 4: SHA-256 avalanche ─────────────────────────────────────
+async function sha256Hex(str) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+let lastHash = '';
+async function updateAvalanche() {
+  const v = document.getElementById('avalanche-input').value;
+  const h = await sha256Hex(v);
+  const hashEl = document.getElementById('av-hash');
+  if (!hashEl) return;
+
+  // Color changed nibbles vs last hash
+  let html = '';
+  for (let i = 0; i < h.length; i += 2) {
+    const byte = h.slice(i, i+2);
+    const changed = lastHash && lastHash.slice(i, i+2) !== byte;
+    html += `<span style="color:${changed?'var(--red)':'var(--accent3)'}">${byte}</span>`;
+    if ((i/2+1) % 16 === 0) html += '<br>';
+    else if ((i/2+1) % 4 === 0) html += ' ';
+  }
+  hashEl.innerHTML = html;
+
+  // Draw heatmap
+  const canvas = document.getElementById('av-canvas');
+  if (!canvas) { lastHash = h; return; }
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * (window.devicePixelRatio||1);
+  canvas.height = 64 * (window.devicePixelRatio||1);
+  ctx.scale(window.devicePixelRatio||1, window.devicePixelRatio||1);
+  const cw = canvas.offsetWidth, ch = 64;
+  const bits = 256;
+  const cellW = cw / bits;
+  if (lastHash) {
+    for (let i = 0; i < bits; i++) {
+      const byteIdx = Math.floor(i / 8);
+      const bitIdx  = 7 - (i % 8);
+      const hBit = (parseInt(h.slice(byteIdx*2, byteIdx*2+2),16) >> bitIdx) & 1;
+      const lBit = (parseInt(lastHash.slice(byteIdx*2, byteIdx*2+2),16) >> bitIdx) & 1;
+      const changed = hBit !== lBit;
+      ctx.fillStyle = changed ? '#ef4444cc' : (hBit ? '#10b98155' : '#1e293b');
+      ctx.fillRect(i * cellW, 0, Math.ceil(cellW), ch);
+    }
+  } else {
+    for (let i = 0; i < bits; i++) {
+      const byteIdx = Math.floor(i / 8);
+      const bitIdx  = 7 - (i % 8);
+      const hBit = (parseInt(h.slice(byteIdx*2, byteIdx*2+2),16) >> bitIdx) & 1;
+      ctx.fillStyle = hBit ? '#10b98177' : '#1e293b';
+      ctx.fillRect(i * cellW, 0, Math.ceil(cellW), ch);
+    }
+  }
+  lastHash = h;
+}
+window.addEventListener('load', updateAvalanche);
+
+// ── SIMULATION 5: Boot sequence step-by-step ─────────────────────────────
+async function runBootSim(mode) {
+  const log = document.getElementById('boot-log');
+  const badge = document.getElementById('boot-status-badge');
+  if (!log) return;
+  log.innerHTML = '';
+  badge.style.background = 'rgba(245,158,11,.15)';
+  badge.style.color = 'var(--gold)';
+  badge.textContent = 'RUNNING';
+
+  const w = (ms) => sleep(ms);
+  const line = (cls, msg) => { appendLog('boot-log', ts() + `<span class="${cls}">${msg}</span>`); };
+
+  line('log-step', '══════════════════════════════════════');
+  line('log-info',  '  secure_bootloader v0.1.0 — starting');
+  line('log-step', '══════════════════════════════════════');
+  await w(400);
+
+  line('log-info', 'Reading image: firmware.signed.bin');
+  await w(300);
+  line('log-muted','  File size: 0x' + (0x4C + 64 + (mode === 'badmagic' ? 0 : 128)).toString(16) + ' bytes');
+  await w(300);
+
+  if (mode === 'badmagic') {
+    line('log-info', 'Parsing header...');
+    await w(350);
+    line('log-err',  '  MAGIC expected: 53 42 4F 54 ("SBOT")');
+    line('log-err',  '  MAGIC found:    DE AD BE EF (unknown)');
+    await w(200);
+    line('log-err',  '[FATAL] Invalid magic; not a signed SBOT image.');
+    badge.style.background = 'rgba(239,68,68,.2)'; badge.style.color = 'var(--red)'; badge.textContent = 'HALTED';
+    return;
+  }
+
+  line('log-info', 'Parsing header...');
+  await w(300);
+  line('log-ok',   '  MAGIC:        0x53424F54 → "SBOT" ✓');
+  await w(200);
+  const ver = mode === 'downgrade' ? 1 : 3;
+  line('log-ok',   `  VERSION:      ${ver} (0x${ver.toString(16).padStart(8,'0')})`);
+  await w(200);
+  line('log-ok',   '  PAYLOAD_SIZE: 0x00000080 (128 bytes)');
+  await w(200);
+  line('log-ok',   '  SIGNATURE:    ' + (mode === 'tamper' || mode === 'keymismatch' ? '<span style="color:var(--gold)">a3f1...9c2e (present)</span>' : '<span style="color:var(--accent3)">a3f1...9c2e (present)</span>'));
+  await w(350);
+
+  line('log-info', 'Anti-rollback check...');
+  await w(300);
+  if (mode === 'downgrade') {
+    line('log-warn', '  stored_version.txt: 2');
+    line('log-warn', `  Image VERSION: ${ver}`);
+    await w(300);
+    line('log-err',  '  ${ver} < 2 → ROLLBACK DETECTED');
+    await w(200);
+    line('log-err',  '[FATAL] Version downgrade rejected. Halting.');
+    badge.style.background = 'rgba(239,68,68,.2)'; badge.style.color = 'var(--red)'; badge.textContent = 'HALTED';
+    return;
+  }
+  line('log-ok', '  stored_version.txt: 1 — image version 3 ≥ 1 ✓');
+  await w(300);
+
+  line('log-info', 'Loading OEM public key...');
+  await w(200);
+  if (mode === 'keymismatch') {
+    line('log-warn', '  Public key: ed_pubkey_B.key (WRONG KEY)');
+  } else {
+    line('log-ok',   '  Public key: ed_pubkey.key (OEM ROM key)');
+  }
+  await w(300);
+
+  line('log-info', 'Computing SHA-256(payload)...');
+  await w(400);
+  if (mode === 'tamper') {
+    line('log-warn', '  Signed hash:   d4e5f6a7b8c9d0e1...');
+    line('log-warn', '  Computed hash: 99aabb1122334455... ← DIVERGED');
+  } else {
+    line('log-ok',   '  Computed hash: d4e5f6a7b8c9d0e1...');
+  }
+  await w(350);
+
+  line('log-info', 'Running Ed25519 signature verification...');
+  await w(500);
+
+  if (mode === 'golden') {
+    line('log-ok',   '  Ed25519 verify: OK ✓');
+    await w(200);
+    line('log-ok',   '');
+    line('log-ok',   '  ╔═══════════════════════════════════╗');
+    line('log-ok',   '  ║  [SUCCESS] Booting image...       ║');
+    line('log-ok',   '  ╚═══════════════════════════════════╝');
+    badge.style.background = 'rgba(16,185,129,.2)'; badge.style.color = 'var(--accent3)'; badge.textContent = 'BOOTED';
+  } else if (mode === 'tamper') {
+    line('log-err',  '  Ed25519 verify: FAIL — hash mismatch');
+    await w(200);
+    line('log-err',  '');
+    line('log-err',  '  ╔═══════════════════════════════════╗');
+    line('log-err',  '  ║  [FATAL] Signature mismatch.      ║');
+    line('log-err',  '  ║         Halting.                  ║');
+    line('log-err',  '  ╚═══════════════════════════════════╝');
+    badge.style.background = 'rgba(239,68,68,.2)'; badge.style.color = 'var(--red)'; badge.textContent = 'HALTED';
+  } else if (mode === 'keymismatch') {
+    line('log-err',  '  Ed25519 verify: FAIL — wrong public key');
+    await w(200);
+    line('log-err',  '');
+    line('log-err',  '  ╔═══════════════════════════════════╗');
+    line('log-err',  '  ║  [FATAL] Signature mismatch.      ║');
+    line('log-err',  '  ║         Halting.                  ║');
+    line('log-err',  '  ╚═══════════════════════════════════╝');
+    badge.style.background = 'rgba(239,68,68,.2)'; badge.style.color = 'var(--red)'; badge.textContent = 'HALTED';
+  }
+}
+
+// ── SIMULATION 6: Live dashboard ─────────────────────────────────────────
+let dbTimer = null, dbTick = 0;
+let dbStats = { pass: 0, sigfail: 0, down: 0, magic: 0 };
+let sparkData = [];
+
+function startDashboard() {
+  if (dbTimer) return;
+  dbTimer = setInterval(dashTick, 1100);
+}
+function stopDashboard()  { clearInterval(dbTimer); dbTimer = null; }
+function resetDashboard() {
+  stopDashboard();
+  dbTick = 0; dbStats = { pass:0, sigfail:0, down:0, magic:0 }; sparkData = [];
+  document.getElementById('db-tick').textContent = 'tick: 0';
+  ['d-pass','d-sigfail','d-down','d-magic','db-total','db-rate'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent='0'; });
+  setLog('db-log', '<span class="log-muted">// Dashboard reset.</span>');
+  drawDonut(); drawSparkline();
+}
+
+function dashTick() {
+  dbTick++;
+  document.getElementById('db-tick').textContent = 'tick: ' + dbTick;
+
+  const r = Math.random();
+  let event, cls, msg;
+  if (r < 0.60) {
+    dbStats.pass++;
+    event = 'pass';
+    cls = 'log-ok';
+    msg = `✅ ECU-${rndEcuId()}: Image v${rndV()} verified. Booting.`;
+  } else if (r < 0.78) {
+    dbStats.sigfail++;
+    event = 'sigfail';
+    cls = 'log-err';
+    msg = `🔨 ECU-${rndEcuId()}: Signature mismatch. HALTED.`;
+  } else if (r < 0.91) {
+    dbStats.down++;
+    event = 'down';
+    cls = 'log-warn';
+    msg = `⏪ ECU-${rndEcuId()}: Downgrade blocked. v${rndV()-1} < stored ${rndV()}.`;
+  } else {
+    dbStats.magic++;
+    event = 'magic';
+    cls = 'log-err';
+    msg = `🚫 ECU-${rndEcuId()}: Bad magic. Not SBOT. HALTED.`;
+  }
+
+  // Update counters
+  document.getElementById('d-pass').textContent    = dbStats.pass;
+  document.getElementById('d-sigfail').textContent = dbStats.sigfail;
+  document.getElementById('d-down').textContent    = dbStats.down;
+  document.getElementById('d-magic').textContent   = dbStats.magic;
+
+  const total = dbStats.pass + dbStats.sigfail + dbStats.down + dbStats.magic;
+  const attacks = dbStats.sigfail + dbStats.down + dbStats.magic;
+  document.getElementById('db-total').textContent = total;
+  document.getElementById('db-rate').textContent  = total > 0 ? Math.round(attacks/total*100) + '%' : '0%';
+
+  // Bars
+  const maxVal = Math.max(...Object.values(dbStats), 1);
+  const barMap = [
+    ['tb-sig',   'tb-sig-bar',  dbStats.sigfail],
+    ['tb-down',  'tb-down-bar', dbStats.down],
+    ['tb-magic', 'tb-magic-bar',dbStats.magic],
+    ['tb-pass',  'tb-pass-bar', dbStats.pass],
+  ];
+  barMap.forEach(([labelId, barId, val]) => {
+    const le = document.getElementById(labelId);
+    const be = document.getElementById(barId);
+    if (le) le.textContent = val;
+    if (be) be.style.width = Math.round(val/maxVal*100) + '%';
+  });
+
+  // Log
+  appendLog('db-log', ts() + `<span class="${cls}">${msg}</span>`);
+
+  // Sparkline
+  sparkData.push(1);
+  if (sparkData.length > 32) sparkData.shift();
+  drawDonut();
+  drawSparkline();
+}
+
+function rndEcuId() { return (Math.floor(Math.random()*900)+100).toString(); }
+function rndV() { return Math.floor(Math.random()*8)+2; }
+
+function drawDonut() {
+  const canvas = document.getElementById('donut-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const total = dbStats.pass + dbStats.sigfail + dbStats.down + dbStats.magic;
+  canvas.width = 120; canvas.height = 120;
+  ctx.clearRect(0,0,120,120);
+  if (total === 0) {
+    ctx.beginPath(); ctx.arc(60,60,44,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,.1)'; ctx.lineWidth=16; ctx.stroke();
+    return;
+  }
+  const slices = [
+    [dbStats.pass,    '#10b981'],
+    [dbStats.sigfail, '#ef4444'],
+    [dbStats.down,    '#f59e0b'],
+    [dbStats.magic,   '#6366f1'],
+  ];
+  let startAngle = -Math.PI/2;
+  slices.forEach(([v, color]) => {
+    if (!v) return;
+    const sweep = (v/total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(60,60);
+    ctx.arc(60,60,52,startAngle,startAngle+sweep);
+    ctx.closePath();
+    ctx.fillStyle = color + 'cc'; ctx.fill();
+    startAngle += sweep;
+  });
+  // Hole
+  ctx.beginPath(); ctx.arc(60,60,32,0,Math.PI*2);
+  ctx.fillStyle = '#0f1523'; ctx.fill();
+  // Center text
+  ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 14px Inter,sans-serif';
+  ctx.textAlign='center'; ctx.fillText(total, 60, 64);
+}
+
+function drawSparkline() {
+  const canvas = document.getElementById('spark-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * (window.devicePixelRatio||1);
+  canvas.height = 80 * (window.devicePixelRatio||1);
+  ctx.scale(window.devicePixelRatio||1, window.devicePixelRatio||1);
+  const W = canvas.offsetWidth, H = 80;
+  ctx.clearRect(0,0,W,H);
+  if (sparkData.length < 2) return;
+
+  const data = sparkData;
+  const max = Math.max(...data, 1);
+  const step = W / (data.length - 1);
+
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = H - (v/max) * (H*0.8) - H*0.1;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  const grd = ctx.createLinearGradient(0,0,W,0);
+  grd.addColorStop(0, '#3b82f6'); grd.addColorStop(1, '#10b981');
+  ctx.strokeStyle = grd; ctx.lineWidth = 2.5; ctx.stroke();
+
+  // Fill under
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  const fillGrd = ctx.createLinearGradient(0,0,0,H);
+  fillGrd.addColorStop(0, 'rgba(59,130,246,.25)'); fillGrd.addColorStop(1, 'rgba(59,130,246,0)');
+  ctx.fillStyle = fillGrd; ctx.fill();
+}
+
+// ── SIMULATION 7: Attack replay ──────────────────────────────────────────
+async function replayAttack(type) {
+  setLog('attack-log', '');
+  const line = (cls, msg) => appendLog('attack-log', ts() + `<span class="${cls}">${msg}</span>`);
+
+  if (type === 'usb') {
+    line('log-info', '🔌 USB diagnostic port connected: OBD-II-A');
+    await sleep(350);
+    line('log-info', 'Attacker loading custom firmware image...');
+    await sleep(350);
+    line('log-info', 'Bootloader: parsing header...');
+    await sleep(300);
+    line('log-warn', '  MAGIC OK, VERSION=1, SIGNATURE present');
+    await sleep(300);
+    line('log-info', 'Bootloader: computing SHA-256(payload)...');
+    await sleep(400);
+    line('log-info', 'Bootloader: verifying Ed25519 signature...');
+    await sleep(400);
+    line('log-err',  '  Attacker lacks OEM private key → cannot produce valid signature');
+    line('log-err',  '[FATAL] Signature mismatch. Halting.');
+    document.getElementById('ti1').textContent = 'BLOCKED';
+    document.getElementById('ti1').className = 'ti-status tis-block';
+  } else if (type === 'ota') {
+    line('log-info', '📡 OTA update received over network...');
+    await sleep(350);
+    line('log-warn', '  MitM agent intercepted and flipped byte 0x4D');
+    await sleep(350);
+    line('log-info', 'Bootloader: MAGIC OK, header parsed.');
+    await sleep(300);
+    line('log-info', 'Bootloader: SHA-256(received_payload)...');
+    await sleep(400);
+    line('log-warn', '  Signed hash:   d4e5f6a7b8...');
+    line('log-warn', '  Computed hash: 991a2b3c4d... ← DIVERGED');
+    await sleep(300);
+    line('log-err',  '[FATAL] Signature mismatch. Halting.');
+    document.getElementById('ti2').textContent = 'BLOCKED';
+    document.getElementById('ti2').className = 'ti-status tis-block';
+  } else if (type === 'downgrade') {
+    line('log-info', '⏪ Attacker flashing firmware v1 (contains CVE-2024-0001)...');
+    await sleep(350);
+    line('log-info', 'Bootloader: MAGIC OK, signature valid.');
+    await sleep(400);
+    line('log-info', 'Bootloader: reading stored_version.txt...');
+    await sleep(300);
+    line('log-warn', '  stored_version = 4');
+    line('log-warn', '  image VERSION  = 1');
+    await sleep(300);
+    line('log-err',  '  1 < 4 → ROLLBACK ATTEMPT');
+    line('log-err',  '[FATAL] Version downgrade rejected. Halting.');
+    document.getElementById('ti3').textContent = 'BLOCKED';
+    document.getElementById('ti3').className = 'ti-status tis-block';
+  }
+}
+
+// ── SIMULATION 8: Test runner ────────────────────────────────────────────
+const testScenarios = [
+  {
+    id: 'golden', resultId: 'tr-golden-r', pass: true,
+    lines: [
+      ['log-info', 'running tests/integration_tests.rs::golden_path'],
+      ['log-info', '  [setup] keygen → secret.key, public.key'],
+      ['log-info', '  [setup] firmware.bin = "dummy firmware payload"'],
+      ['log-info', '  [signer] cargo run -p firmware_signer -- sign --version 1'],
+      ['log-ok',   '  [signer] Signed image written to firmware.signed.bin'],
+      ['log-info', '  [bootloader] cargo run -p secure_bootloader -- --image firmware.signed.bin'],
+      ['log-ok',   '  [bootloader] MAGIC=SBOT ✓  VERSION=1 ≥ stored(0) ✓'],
+      ['log-ok',   '  [bootloader] SHA-256 ✓  Ed25519 verify ✓'],
+      ['log-ok',   '  [bootloader] [SUCCESS] Booting image...'],
+      ['log-ok',   '  assert!(exit 0) ✓   assert!(stdout contains "[SUCCESS]") ✓'],
+      ['log-ok',   'test golden_path ... ok'],
+    ]
+  },
+  {
+    id: 'tamper', resultId: 'tr-tamper-r', pass: false,
+    lines: [
+      ['log-info', 'running tests/integration_tests.rs::tamper'],
+      ['log-info', '  [setup] keygen + sign identical to golden_path'],
+      ['log-warn', '  [tamper] data[0x4C] ^= 1  ← flipping one bit in payload'],
+      ['log-info', '  [bootloader] verifying modified image...'],
+      ['log-warn', '  [bootloader] SHA-256(payload) → 99aa... (DIVERGED from signed hash)'],
+      ['log-err',  '  [bootloader] [FATAL] Signature mismatch. Halting.'],
+      ['log-ok',   '  assert!(!exit 0) ✓   assert!(stderr contains "FATAL") ✓'],
+      ['log-ok',   'test tamper ... ok'],
+    ]
+  },
+  {
+    id: 'keymismatch', resultId: 'tr-keymismatch-r', pass: false,
+    lines: [
+      ['log-info', 'running tests/integration_tests.rs::key_mismatch'],
+      ['log-info', '  [setup] keygen A → secret_a.key + public_a.key'],
+      ['log-info', '  [setup] keygen B → secret_b.key + public_b.key'],
+      ['log-info', '  [signer] sign with secret_a.key'],
+      ['log-warn', '  [bootloader] verifying with public_b.key (WRONG KEY)'],
+      ['log-err',  '  [bootloader] [FATAL] Signature mismatch. Halting.'],
+      ['log-ok',   '  assert!(!exit 0) ✓   assert!(stderr contains "Signature mismatch") ✓'],
+      ['log-ok',   'test key_mismatch ... ok'],
+    ]
+  },
+  {
+    id: 'downgrade', resultId: 'tr-downgrade-r', pass: false,
+    lines: [
+      ['log-info', 'running tests/integration_tests.rs::downgrade'],
+      ['log-info', '  [setup] sign firmware with --version 1'],
+      ['log-warn', '  [setup] stored_version.txt ← "2" (device already at v2)'],
+      ['log-info', '  [bootloader] MAGIC ✓  SIGNATURE ✓  VERSION=1'],
+      ['log-warn', '  [bootloader] stored_version=2, image=1 → 1 < 2 ROLLBACK'],
+      ['log-err',  '  [bootloader] [FATAL] Version downgrade rejected. Halting.'],
+      ['log-ok',   '  assert!(!exit 0) ✓   assert!(stderr contains "downgrade") ✓'],
+      ['log-ok',   'test downgrade ... ok'],
+    ]
+  },
+];
+
+let testRunning = false;
+async function runAllTests() {
+  if (testRunning) return;
+  testRunning = true;
+  clearTests();
+  const badge = document.getElementById('test-badge');
+  badge.style.background = 'rgba(245,158,11,.15)'; badge.style.color = 'var(--gold)'; badge.textContent = 'RUNNING';
+  appendLog('test-log', ts() + '<span class="log-info">cargo test --workspace -- --test-thread 1</span>');
+  appendLog('test-log', ts() + '<span class="log-muted">   Compiling firmware_signer, secure_bootloader, integration_tests...</span>');
+  await sleep(900);
+  appendLog('test-log', ts() + '<span class="log-ok">   Finished. Running 4 tests.</span>');
+  await sleep(300);
+
+  let passed = 0;
+  for (const t of testScenarios) {
+    document.getElementById(t.resultId).innerHTML = '<span class="status-pending">⋯ running</span>';
+    await sleep(300);
+    for (const [cls, msg] of t.lines) {
+      appendLog('test-log', ts() + `<span class="${cls}">${msg}</span>`);
+      await sleep(200);
+    }
+    await sleep(200);
+    if (t.pass) {
+      document.getElementById(t.resultId).innerHTML = '<span class="status-pass">✓ PASS</span>';
+      passed++;
+    } else {
+      document.getElementById(t.resultId).innerHTML = '<span class="status-pass">✓ PASS</span>';
+      passed++;
+    }
+    await sleep(300);
+  }
+
+  await sleep(200);
+  appendLog('test-log', '');
+  appendLog('test-log', ts() + `<span class="log-ok">test result: ok. ${passed} passed; 0 failed; 0 ignored.</span>`);
+  badge.style.background = 'rgba(16,185,129,.15)'; badge.style.color = 'var(--accent3)'; badge.textContent = 'ALL PASS';
+  document.getElementById('test-summary').textContent = `${passed}/4 passed`;
+  testRunning = false;
+}
+
+function clearTests() {
+  setLog('test-log', '<span class="log-muted">// Tests cleared.</span>');
+  testScenarios.forEach(t => {
+    document.getElementById(t.resultId).innerHTML = '<span class="status-pending">—</span>';
+  });
+  document.getElementById('test-summary').textContent = '';
+  const badge = document.getElementById('test-badge');
+  badge.style.background = 'rgba(245,158,11,.15)'; badge.style.color = 'var(--gold)'; badge.textContent = 'IDLE';
+}
+</script>
+</body>
+</html>
