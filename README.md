@@ -1,3 +1,5 @@
+> **⚠️ Archived (2026-06-28)** — Folded into [**automotive-ota-security**](https://github.com/vgandhi1/automotive-ota-security). See [ARCHIVED.md](./ARCHIVED.md).
+
 # OTA Firmware Verifier
 
 A Rust simulation of the secure boot and OTA firmware verification pipeline used in automotive ECUs. Models cryptographic signing, bootloader verification, and anti-rollback enforcement — the core mechanisms mandated by **UNECE WP.29/R156** and **ISO/SAE 21434**.
