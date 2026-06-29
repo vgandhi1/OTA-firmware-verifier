@@ -1,3 +1,8 @@
+> ⚠️ **ARCHIVED** — now maintained as part of
+> [vgandhi1/automotive-ota-security](https://github.com/vgandhi1/automotive-ota-security/tree/main/OTA-firmware-verifier) (archived: 2026-06-28).
+> The live demo is at: https://vgandhi1.github.io/automotive-ota-security/OTA-firmware-verifier/
+
+
 > **⚠️ Archived (2026-06-28)** — Folded into [**automotive-ota-security**](https://github.com/vgandhi1/automotive-ota-security). See [ARCHIVED.md](./ARCHIVED.md).
 
 # OTA Firmware Verifier
